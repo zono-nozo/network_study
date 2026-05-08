@@ -1,0 +1,144 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ダッシュボード — ネットワーク確認ツール</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 32px 16px; }
+
+    h1 { font-size: 1.1rem; color: #8888aa; margin-bottom: 24px; letter-spacing: 0.1em; }
+
+    .card {
+      width: 100%; max-width: 560px;
+      background: #16213e; border: 1px solid #2a2a5a;
+      border-radius: 8px; padding: 20px 24px; margin-bottom: 20px;
+    }
+    .card h2 { font-size: 0.8rem; color: #6688aa; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.12em; }
+
+    .info-row { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #1e2a40; }
+    .info-row:last-child { border-bottom: none; }
+    .info-key   { font-size: 0.78rem; color: #8899aa; }
+    .info-value { font-size: 0.9rem;  color: #aaddff; font-weight: bold; }
+    .info-value.loading { color: #556; font-weight: normal; font-size: 0.8rem; }
+
+    .status-inline { display: flex; align-items: center; gap: 8px; }
+    .status-inline .dot { font-size: 1rem; }
+    .ok-text  { color: #44dd88; }
+    .err-text { color: #ff6666; }
+
+    .error-detail { font-size: 0.72rem; color: #ff9966; margin-top: 4px; word-break: break-all; }
+
+    .top-bar { width: 100%; max-width: 560px; display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
+    .top-bar span { font-size: 0.75rem; color: #556; }
+    button.btn-logout {
+      font-family: monospace; font-size: 0.75rem;
+      background: #221515; color: #cc6666; border: 1px solid #442222;
+      padding: 5px 14px; border-radius: 4px; cursor: pointer;
+    }
+    button.btn-logout:hover { background: #332222; }
+
+    #loading-msg { color: #556; font-size: 0.85rem; }
+  </style>
+</head>
+<body>
+
+  <h1>[ Network Inspector ]</h1>
+
+  <div class="top-bar">
+    <span id="loading-msg">情報を取得中...</span>
+    <button class="btn-logout" onclick="logout()">ログアウト</button>
+  </div>
+
+  <!-- ── サーバー情報 ── -->
+  <div class="card" id="server-card" style="display:none">
+    <h2>稼働サーバー情報（バックエンド）</h2>
+    <div class="info-row">
+      <span class="info-key">Hostname</span>
+      <span class="info-value" id="info-hostname">—</span>
+    </div>
+    <div class="info-row">
+      <span class="info-key">Local IP Address</span>
+      <span class="info-value" id="info-ip">—</span>
+    </div>
+  </div>
+
+  <!-- ── DB ステータス ── -->
+  <div class="card" id="db-card" style="display:none">
+    <h2>データベース接続ステータス</h2>
+    <div class="info-row">
+      <span class="info-key">PostgreSQL</span>
+      <div class="status-inline">
+        <span class="dot" id="db-dot">⬜</span>
+        <span id="db-status-text" class="info-value loading">確認中...</span>
+      </div>
+    </div>
+    <div class="error-detail" id="db-detail"></div>
+  </div>
+
+  <script>
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ↓ バックエンドAPIのURLをここで設定してください
+    const API_BASE = "http://localhost:5000";
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    const token = localStorage.getItem("token");
+    if (!token) {
+      window.location.href = "index.html";
+    }
+
+    async function loadServerInfo() {
+      try {
+        const res = await fetch(`${API_BASE}/api/server-info`, {
+          headers: { "Authorization": `Bearer ${token}` },
+          signal: AbortSignal.timeout(5000),
+        });
+
+        if (res.status === 401) {
+          localStorage.removeItem("token");
+          window.location.href = "index.html";
+          return;
+        }
+
+        const data = await res.json();
+
+        document.getElementById("info-hostname").textContent = data.hostname;
+        document.getElementById("info-ip").textContent       = data.local_ip;
+
+        if (data.db.connected) {
+          document.getElementById("db-dot").textContent         = "🟢";
+          document.getElementById("db-status-text").textContent = "接続OK";
+          document.getElementById("db-status-text").className   = "info-value ok-text";
+        } else {
+          document.getElementById("db-dot").textContent         = "🔴";
+          document.getElementById("db-status-text").textContent = "接続失敗";
+          document.getElementById("db-status-text").className   = "info-value err-text";
+          document.getElementById("db-detail").textContent      = data.db.message;
+        }
+
+        document.getElementById("loading-msg").textContent = "最終取得: " + new Date().toLocaleTimeString("ja-JP");
+        document.getElementById("server-card").style.display = "";
+        document.getElementById("db-card").style.display     = "";
+
+      } catch (e) {
+        document.getElementById("loading-msg").textContent = "APIに接続できません: " + e.message;
+      }
+    }
+
+    async function logout() {
+      try {
+        await fetch(`${API_BASE}/api/logout`, {
+          method: "POST",
+          headers: { "Authorization": `Bearer ${token}` },
+        });
+      } catch (_) {}
+      localStorage.removeItem("token");
+      window.location.href = "index.html";
+    }
+
+    loadServerInfo();
+    setInterval(loadServerInfo, 30000);
+  </script>
+</body>
+</html>

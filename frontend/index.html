@@ -1,0 +1,210 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>ネットワーク確認ツール</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: monospace; background: #1a1a2e; color: #e0e0e0; min-height: 100vh; display: flex; flex-direction: column; align-items: center; padding: 32px 16px; }
+
+    h1 { font-size: 1.1rem; color: #8888aa; margin-bottom: 24px; letter-spacing: 0.1em; }
+
+    /* ── Status Panel ── */
+    #status-panel {
+      width: 100%; max-width: 560px;
+      background: #16213e; border: 1px solid #2a2a5a;
+      border-radius: 8px; padding: 20px 24px; margin-bottom: 28px;
+    }
+    #status-panel h2 { font-size: 0.8rem; color: #6688aa; margin-bottom: 16px; text-transform: uppercase; letter-spacing: 0.12em; }
+    .status-row { display: flex; align-items: flex-start; gap: 12px; padding: 10px 0; border-bottom: 1px solid #1e2a40; }
+    .status-row:last-of-type { border-bottom: none; }
+    .status-light { font-size: 1.2rem; flex-shrink: 0; line-height: 1.4; }
+    .status-text { flex: 1; }
+    .status-label { font-size: 0.85rem; color: #aabbcc; }
+    .status-value { font-size: 0.78rem; margin-top: 3px; }
+    .status-value.ok   { color: #44dd88; }
+    .status-value.err  { color: #ff6666; }
+    .status-value.wait { color: #888; }
+    .error-detail { font-size: 0.72rem; color: #ff9966; margin-top: 4px; word-break: break-all; }
+
+    .refresh-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
+    .refresh-row span { font-size: 0.72rem; color: #556; }
+    button.btn-refresh {
+      font-family: monospace; font-size: 0.75rem;
+      background: #223; color: #88aacc; border: 1px solid #334;
+      padding: 5px 14px; border-radius: 4px; cursor: pointer;
+    }
+    button.btn-refresh:hover { background: #334; }
+
+    /* ── Login Panel ── */
+    #login-panel {
+      width: 100%; max-width: 360px;
+      background: #16213e; border: 1px solid #2a2a5a;
+      border-radius: 8px; padding: 28px 32px;
+    }
+    #login-panel h2 { font-size: 0.8rem; color: #6688aa; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.12em; }
+    .field { margin-bottom: 14px; }
+    .field label { display: block; font-size: 0.75rem; color: #8899aa; margin-bottom: 5px; }
+    .field input {
+      width: 100%; padding: 9px 12px;
+      background: #0f172a; color: #ddeeff;
+      border: 1px solid #2a3a5a; border-radius: 4px;
+      font-family: monospace; font-size: 0.9rem;
+      outline: none;
+    }
+    .field input:focus { border-color: #4466aa; }
+    button.btn-login {
+      width: 100%; padding: 10px;
+      background: #2244aa; color: #eef; border: none;
+      border-radius: 4px; font-family: monospace; font-size: 0.9rem;
+      cursor: pointer; margin-top: 6px;
+    }
+    button.btn-login:hover { background: #2255cc; }
+    button.btn-login:disabled { background: #223; color: #556; cursor: default; }
+    #login-error { margin-top: 12px; font-size: 0.8rem; color: #ff6666; min-height: 1.2em; text-align: center; }
+  </style>
+</head>
+<body>
+
+  <h1>[ Network Inspector ]</h1>
+
+  <!-- ── Status Panel ── -->
+  <div id="status-panel">
+    <h2>インフラ接続ステータス</h2>
+
+    <div class="status-row">
+      <span class="status-light" id="api-light">⬜</span>
+      <div class="status-text">
+        <div class="status-label">① フロントエンド → バックエンドAPI</div>
+        <div class="status-value wait" id="api-value">確認中...</div>
+      </div>
+    </div>
+
+    <div class="status-row">
+      <span class="status-light" id="db-light">⬜</span>
+      <div class="status-text">
+        <div class="status-label">② バックエンドAPI → データベース（PostgreSQL）</div>
+        <div class="status-value wait" id="db-value">確認中...</div>
+        <div class="error-detail" id="db-error"></div>
+      </div>
+    </div>
+
+    <div class="refresh-row">
+      <span id="last-checked">—</span>
+      <button class="btn-refresh" onclick="checkStatus()">再確認</button>
+    </div>
+  </div>
+
+  <!-- ── Login Panel ── -->
+  <div id="login-panel">
+    <h2>ログイン</h2>
+    <div class="field">
+      <label>ユーザー名</label>
+      <input type="text" id="username" placeholder="admin" autocomplete="username">
+    </div>
+    <div class="field">
+      <label>パスワード</label>
+      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+    </div>
+    <button class="btn-login" id="btn-login" onclick="login()">ログイン</button>
+    <div id="login-error"></div>
+  </div>
+
+  <script>
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+    // ↓ バックエンドAPIのURLをここで設定してください
+    const API_BASE = "http://localhost:5000";
+    // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+
+    // ログイン済みなら dashboard へ飛ばす
+    if (localStorage.getItem("token")) {
+      window.location.href = "dashboard.html";
+    }
+
+    // ページ読み込み時 & 30秒おきに自動確認
+    checkStatus();
+    setInterval(checkStatus, 30000);
+
+    async function checkStatus() {
+      setLight("api", "wait", "確認中...", "⬜");
+      setLight("db",  "wait", "確認中...", "⬜");
+      document.getElementById("db-error").textContent = "";
+
+      try {
+        const res  = await fetch(`${API_BASE}/api/status`, { signal: AbortSignal.timeout(5000) });
+        const data = await res.json();
+
+        // ① API接続
+        setLight("api", "ok", "接続OK", "🟢");
+
+        // ② DB接続
+        if (data.db.connected) {
+          setLight("db", "ok", "接続OK", "🟢");
+        } else {
+          setLight("db", "err", "接続失敗", "🔴");
+          document.getElementById("db-error").textContent = data.db.message;
+        }
+
+      } catch (e) {
+        setLight("api", "err", "接続失敗（APIに到達できません）", "🔴");
+        setLight("db",  "wait", "確認不可（APIが応答しない）", "⬜");
+      }
+
+      document.getElementById("last-checked").textContent =
+        "最終確認: " + new Date().toLocaleTimeString("ja-JP");
+    }
+
+    function setLight(target, cls, text, emoji) {
+      const val   = document.getElementById(`${target}-value`);
+      const light = document.getElementById(`${target}-light`);
+      val.className = `status-value ${cls}`;
+      val.textContent = text;
+      light.textContent = emoji;
+    }
+
+    async function login() {
+      const username = document.getElementById("username").value.trim();
+      const password = document.getElementById("password").value;
+      const errEl    = document.getElementById("login-error");
+      const btn      = document.getElementById("btn-login");
+
+      errEl.textContent = "";
+      if (!username || !password) {
+        errEl.textContent = "ユーザー名とパスワードを入力してください";
+        return;
+      }
+
+      btn.disabled = true;
+      btn.textContent = "確認中...";
+
+      try {
+        const res  = await fetch(`${API_BASE}/api/login`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const data = await res.json();
+
+        if (data.success) {
+          localStorage.setItem("token", data.token);
+          window.location.href = "dashboard.html";
+        } else {
+          errEl.textContent = data.message || "ログインに失敗しました";
+        }
+      } catch (e) {
+        errEl.textContent = "APIに接続できません: " + e.message;
+      } finally {
+        btn.disabled = false;
+        btn.textContent = "ログイン";
+      }
+    }
+
+    // Enter キーでログイン
+    document.addEventListener("keydown", e => {
+      if (e.key === "Enter") login();
+    });
+  </script>
+</body>
+</html>
