@@ -27,7 +27,6 @@
     .status-value.err  { color: #ff6666; }
     .status-value.wait { color: #888; }
     .error-detail { font-size: 0.72rem; color: #ff9966; margin-top: 4px; word-break: break-all; }
-
     .refresh-row { display: flex; align-items: center; justify-content: space-between; margin-top: 14px; }
     .refresh-row span { font-size: 0.72rem; color: #556; }
     button.btn-refresh {
@@ -37,32 +36,48 @@
     }
     button.btn-refresh:hover { background: #334; }
 
-    /* ── Login Panel ── */
-    #login-panel {
+    /* ── Form Panel ── */
+    #form-panel {
       width: 100%; max-width: 360px;
       background: #16213e; border: 1px solid #2a2a5a;
-      border-radius: 8px; padding: 28px 32px;
+      border-radius: 8px; overflow: hidden;
     }
-    #login-panel h2 { font-size: 0.8rem; color: #6688aa; margin-bottom: 20px; text-transform: uppercase; letter-spacing: 0.12em; }
+
+    /* タブ */
+    .tabs { display: flex; border-bottom: 1px solid #2a2a5a; }
+    .tab-btn {
+      flex: 1; padding: 12px;
+      background: #0f172a; color: #556;
+      border: none; font-family: monospace; font-size: 0.8rem;
+      text-transform: uppercase; letter-spacing: 0.1em;
+      cursor: pointer; transition: background 0.15s, color 0.15s;
+    }
+    .tab-btn:first-child { border-right: 1px solid #2a2a5a; }
+    .tab-btn.active { background: #16213e; color: #88aacc; }
+    .tab-btn:hover:not(.active) { background: #131c30; color: #778899; }
+
+    /* フォーム共通 */
+    .form-body { padding: 24px 28px 28px; }
     .field { margin-bottom: 14px; }
     .field label { display: block; font-size: 0.75rem; color: #8899aa; margin-bottom: 5px; }
     .field input {
       width: 100%; padding: 9px 12px;
       background: #0f172a; color: #ddeeff;
       border: 1px solid #2a3a5a; border-radius: 4px;
-      font-family: monospace; font-size: 0.9rem;
-      outline: none;
+      font-family: monospace; font-size: 0.9rem; outline: none;
     }
     .field input:focus { border-color: #4466aa; }
-    button.btn-login {
+    button.btn-submit {
       width: 100%; padding: 10px;
       background: #2244aa; color: #eef; border: none;
       border-radius: 4px; font-family: monospace; font-size: 0.9rem;
       cursor: pointer; margin-top: 6px;
     }
-    button.btn-login:hover { background: #2255cc; }
-    button.btn-login:disabled { background: #223; color: #556; cursor: default; }
-    #login-error { margin-top: 12px; font-size: 0.8rem; color: #ff6666; min-height: 1.2em; text-align: center; }
+    button.btn-submit:hover { background: #2255cc; }
+    button.btn-submit:disabled { background: #223; color: #556; cursor: default; }
+    .form-msg { margin-top: 12px; font-size: 0.8rem; min-height: 1.2em; text-align: center; }
+    .form-msg.err  { color: #ff6666; }
+    .form-msg.ok   { color: #44dd88; }
   </style>
 </head>
 <body>
@@ -72,7 +87,6 @@
   <!-- ── Status Panel ── -->
   <div id="status-panel">
     <h2>インフラ接続ステータス</h2>
-
     <div class="status-row">
       <span class="status-light" id="api-light">⬜</span>
       <div class="status-text">
@@ -80,7 +94,6 @@
         <div class="status-value wait" id="api-value">確認中...</div>
       </div>
     </div>
-
     <div class="status-row">
       <span class="status-light" id="db-light">⬜</span>
       <div class="status-text">
@@ -89,26 +102,50 @@
         <div class="error-detail" id="db-error"></div>
       </div>
     </div>
-
     <div class="refresh-row">
       <span id="last-checked">—</span>
       <button class="btn-refresh" onclick="checkStatus()">再確認</button>
     </div>
   </div>
 
-  <!-- ── Login Panel ── -->
-  <div id="login-panel">
-    <h2>ログイン</h2>
-    <div class="field">
-      <label>ユーザー名</label>
-      <input type="text" id="username" placeholder="admin" autocomplete="username">
+  <!-- ── Form Panel（ログイン／新規登録 タブ切り替え）── -->
+  <div id="form-panel">
+    <div class="tabs">
+      <button class="tab-btn active" id="tab-login"    onclick="switchTab('login')">ログイン</button>
+      <button class="tab-btn"        id="tab-register" onclick="switchTab('register')">新規登録</button>
     </div>
-    <div class="field">
-      <label>パスワード</label>
-      <input type="password" id="password" placeholder="••••••••" autocomplete="current-password">
+
+    <!-- ログインフォーム -->
+    <div id="pane-login" class="form-body">
+      <div class="field">
+        <label>ユーザー名</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>パスワード</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password">
+      </div>
+      <button class="btn-submit" id="btn-login" onclick="login()">ログイン</button>
+      <div class="form-msg err" id="login-msg"></div>
     </div>
-    <button class="btn-login" id="btn-login" onclick="login()">ログイン</button>
-    <div id="login-error"></div>
+
+    <!-- 新規登録フォーム -->
+    <div id="pane-register" class="form-body" style="display:none">
+      <div class="field">
+        <label>ユーザー名</label>
+        <input type="text" id="reg-username" placeholder="新しいユーザー名" autocomplete="username">
+      </div>
+      <div class="field">
+        <label>パスワード（6文字以上）</label>
+        <input type="password" id="reg-password" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <div class="field">
+        <label>パスワード（確認）</label>
+        <input type="password" id="reg-password2" placeholder="••••••••" autocomplete="new-password">
+      </div>
+      <button class="btn-submit" id="btn-register" onclick="register()">登録する</button>
+      <div class="form-msg" id="reg-msg"></div>
+    </div>
   </div>
 
   <script>
@@ -117,40 +154,43 @@
     const API_BASE = "http://localhost:5000";
     // ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-    // ログイン済みなら dashboard へ飛ばす
     if (localStorage.getItem("token")) {
       window.location.href = "dashboard.html";
     }
 
-    // ページ読み込み時 & 30秒おきに自動確認
     checkStatus();
     setInterval(checkStatus, 30000);
+
+    // ── タブ切り替え ──────────────────────────────────
+
+    function switchTab(tab) {
+      const isLogin = tab === "login";
+      document.getElementById("tab-login").classList.toggle("active", isLogin);
+      document.getElementById("tab-register").classList.toggle("active", !isLogin);
+      document.getElementById("pane-login").style.display    = isLogin ? "" : "none";
+      document.getElementById("pane-register").style.display = isLogin ? "none" : "";
+    }
+
+    // ── ステータス確認 ────────────────────────────────
 
     async function checkStatus() {
       setLight("api", "wait", "確認中...", "⬜");
       setLight("db",  "wait", "確認中...", "⬜");
       document.getElementById("db-error").textContent = "";
-
       try {
         const res  = await fetch(`${API_BASE}/api/status`, { signal: AbortSignal.timeout(5000) });
         const data = await res.json();
-
-        // ① API接続
         setLight("api", "ok", "接続OK", "🟢");
-
-        // ② DB接続
         if (data.db.connected) {
           setLight("db", "ok", "接続OK", "🟢");
         } else {
           setLight("db", "err", "接続失敗", "🔴");
           document.getElementById("db-error").textContent = data.db.message;
         }
-
       } catch (e) {
         setLight("api", "err", "接続失敗（APIに到達できません）", "🔴");
         setLight("db",  "wait", "確認不可（APIが応答しない）", "⬜");
       }
-
       document.getElementById("last-checked").textContent =
         "最終確認: " + new Date().toLocaleTimeString("ja-JP");
     }
@@ -158,26 +198,23 @@
     function setLight(target, cls, text, emoji) {
       const val   = document.getElementById(`${target}-value`);
       const light = document.getElementById(`${target}-light`);
-      val.className = `status-value ${cls}`;
+      val.className   = `status-value ${cls}`;
       val.textContent = text;
       light.textContent = emoji;
     }
 
+    // ── ログイン ──────────────────────────────────────
+
     async function login() {
-      const username = document.getElementById("username").value.trim();
-      const password = document.getElementById("password").value;
-      const errEl    = document.getElementById("login-error");
+      const username = document.getElementById("login-username").value.trim();
+      const password = document.getElementById("login-password").value;
+      const msgEl    = document.getElementById("login-msg");
       const btn      = document.getElementById("btn-login");
 
-      errEl.textContent = "";
-      if (!username || !password) {
-        errEl.textContent = "ユーザー名とパスワードを入力してください";
-        return;
-      }
+      msgEl.textContent = "";
+      if (!username || !password) { msgEl.textContent = "ユーザー名とパスワードを入力してください"; return; }
 
-      btn.disabled = true;
-      btn.textContent = "確認中...";
-
+      btn.disabled = true; btn.textContent = "確認中...";
       try {
         const res  = await fetch(`${API_BASE}/api/login`, {
           method: "POST",
@@ -186,24 +223,68 @@
           signal: AbortSignal.timeout(5000),
         });
         const data = await res.json();
-
         if (data.success) {
           localStorage.setItem("token", data.token);
           window.location.href = "dashboard.html";
         } else {
-          errEl.textContent = data.message || "ログインに失敗しました";
+          msgEl.textContent = data.message || "ログインに失敗しました";
         }
       } catch (e) {
-        errEl.textContent = "APIに接続できません: " + e.message;
+        msgEl.textContent = "APIに接続できません: " + e.message;
       } finally {
-        btn.disabled = false;
-        btn.textContent = "ログイン";
+        btn.disabled = false; btn.textContent = "ログイン";
       }
     }
 
-    // Enter キーでログイン
+    // ── 新規登録 ──────────────────────────────────────
+
+    async function register() {
+      const username  = document.getElementById("reg-username").value.trim();
+      const password  = document.getElementById("reg-password").value;
+      const password2 = document.getElementById("reg-password2").value;
+      const msgEl     = document.getElementById("reg-msg");
+      const btn       = document.getElementById("btn-register");
+
+      msgEl.className   = "form-msg";
+      msgEl.textContent = "";
+
+      if (!username || !password) { msgEl.classList.add("err"); msgEl.textContent = "すべての項目を入力してください"; return; }
+      if (password !== password2) { msgEl.classList.add("err"); msgEl.textContent = "パスワードが一致しません"; return; }
+      if (password.length < 6)   { msgEl.classList.add("err"); msgEl.textContent = "パスワードは6文字以上にしてください"; return; }
+
+      btn.disabled = true; btn.textContent = "登録中...";
+      try {
+        const res  = await fetch(`${API_BASE}/api/register`, {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ username, password }),
+          signal: AbortSignal.timeout(5000),
+        });
+        const data = await res.json();
+        if (data.success) {
+          msgEl.classList.add("ok");
+          msgEl.textContent = `${data.message} → ログインしてください`;
+          document.getElementById("reg-username").value  = "";
+          document.getElementById("reg-password").value  = "";
+          document.getElementById("reg-password2").value = "";
+          setTimeout(() => switchTab("login"), 1500);
+        } else {
+          msgEl.classList.add("err");
+          msgEl.textContent = data.message || "登録に失敗しました";
+        }
+      } catch (e) {
+        msgEl.classList.add("err");
+        msgEl.textContent = "APIに接続できません: " + e.message;
+      } finally {
+        btn.disabled = false; btn.textContent = "登録する";
+      }
+    }
+
+    // Enter キー対応
     document.addEventListener("keydown", e => {
-      if (e.key === "Enter") login();
+      if (e.key !== "Enter") return;
+      const loginVisible = document.getElementById("pane-login").style.display !== "none";
+      if (loginVisible) login(); else register();
     });
   </script>
 </body>
